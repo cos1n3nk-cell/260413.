@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>雷達找顏色 - 迷你格子挑戰版</title>
+    <style>
+        body { 
+            background-color: #0d0d0d; 
+            color: #fff; 
+            font-family: "Microsoft JhengHei", sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; margin: 0; overflow: hidden;
+        }
+        #ui {
+            background: rgba(20, 20, 20, 0.9);
+            padding: 10px 25px;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            border: 1px solid #00f2ff;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
+        }
+        .target-info { display: flex; align-items: center; gap: 15px; font-size: 18px; }
+        #targetBox { 
+            width: 40px; height: 40px; 
+            border: 2px solid #fff; 
+            border-radius: 4px;
+        }
+        #canvas-container { 
+            position: relative; 
+            border: 2px solid #333;
+            cursor: none;
+        }
+        canvas { background: #000; display: block; }
+        .stat-val { font-weight: bold; color: #00f2ff; font-size: 22px; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="target-info">
+            目標：<div id="targetBox"></div>
+        </div>
+        <div>⏱ <span id="timer" class="stat-val">30</span></div>
+        <div>🏆 <span id="score" class="stat-val">0</span></div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+    </div>
+
+    <p style="margin-top: 15px; color: #555; letter-spacing: 1px;">移動雷達掃描迷你格點，點擊正確顏色</p>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const targetBox = document.getElementById('targetBox');
+        const timerEl = document.getElementById('timer');
+        const scoreEl = document.getElementById('score');
+
+        // --- 核心參數調整 ---
+        const gridSize = 25;       // 格子縮小到 25 (原本的 1/4)
+        const radarRadius = 120;   // 雷達範圍微調 (依然涵蓋約 4x4 大範圍的迷你格)
+        const colors = ['#FF3E3E', '#3EFF3E', '#3E3EFF', '#FFFF3E', '#FF3EFF', '#3EFFFF', '#FFA500', '#FFFFFF'];
+        
+        let grid = [];
+        let targetColor = '';
+        let score = 0;
+        let timeLeft = 45; // 迷你格難度較高，多給一點時間
+        let mouseX = -500, mouseY = -500;
+        let isPlaying = true;
+
+        function initMap() {
+            grid = [];
+            const cols = Math.ceil(canvas.width / gridSize);
+            const rows = Math.ceil(canvas.height / gridSize);
+
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    grid.push({
+                        x: x * gridSize,
+                        y: y * gridSize,
+                        color: colors[Math.floor(Math.random() * colors.length)]
+                    });
+                }
+            }
+            // 隨機選一個目標顏色
+            targetColor = colors[Math.floor(Math.random() * colors.length)];
+            targetBox.style.backgroundColor = targetColor;
+            targetBox.style.boxShadow = `0 0 15px ${targetColor}`;
+        }
+
+        function draw() {
+            if (!isPlaying) return;
+
+            // 背景清理
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製格點
+            grid.forEach(cell => {
+                const cx = cell.x + gridSize / 2;
+                const cy = cell.y + gridSize / 2;
+                const dx = cx - mouseX;
+                const dy = cy - mouseY;
+                const distSq = dx*dx + dy*dy; // 使用平方距離計算效能較好
+                const rSq = radarRadius * radarRadius;
+
+                if (distSq < rSq) {
+                    const dist = Math.sqrt(distSq);
+                    let opacity = 1 - (dist / radarRadius);
+                    
+                    ctx.globalAlpha = opacity;
+                    ctx.fillStyle = cell.color;
+                    // 畫出小方格，留一點間隙 (Padding)
+                    ctx.fillRect(cell.x + 1, cell.y + 1, gridSize - 2, gridSize - 2);
+                } else {
+                    // 範圍外極暗的參考點
+                    ctx.globalAlpha = 0.05;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(cell.x + gridSize/2 - 1, cell.y + gridSize/2 - 1, 2, 2);
+                }
+            });
+
+            ctx.globalAlpha = 1.0;
+
+            // 繪製雷達 UI
+            ctx.strokeStyle = '#00f2ff';
+            ctx.lineWidth = 2;
+            
+            // 外圈
+            ctx.beginPath();
+            ctx.arc(mouseX, mouseY, radarRadius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 十字準星
+            ctx.setLineDash([5, 5]); // 虛線增加科技感
+            ctx.beginPath();
+            ctx.moveTo(mouseX - radarRadius, mouseY); ctx.lineTo(mouseX + radarRadius, mouseY);
+            ctx.moveTo(mouseX, mouseY - radarRadius); ctx.lineTo(mouseX, mouseY + radarRadius);
+            ctx.stroke();
+            ctx.setLineDash([]); // 恢復實線
+
+            requestAnimationFrame(draw);
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('mousedown', () => {
+            if (!isPlaying) return;
+
+            const col = Math.floor(mouseX / gridSize);
+            const row = Math.floor(mouseY / gridSize);
+            const clickedCell = grid.find(g => g.x === col * gridSize && g.y === row * gridSize);
+
+            if (clickedCell && clickedCell.color === targetColor) {
+                score += 10;
+                scoreEl.innerText = score;
+                initMap(); // 答對立即重洗
+            }
+        });
+
+        const gameTimer = setInterval(() => {
+            timeLeft--;
+            timerEl.innerText = timeLeft;
+            if (timeLeft <= 0) {
+                isPlaying = false;
+                clearInterval(gameTimer);
+                alert("時間到！最終得分: " + score);
+                location.reload();
+            }
+        }, 1000);
+
+        initMap();
+        draw();
+    </script>
+</body>
+</html>
