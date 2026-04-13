@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ 極限電流急急棒 ⚡</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        :root {
+            --neon-color: #00f2ff; /* 默認霓虹藍 */
+            --fail-color: #ff0044;
+            --success-color: #00ff44;
+        }
+
+        body {
+            background-color: #0a0a0c;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            color: #ddd;
+            font-family: 'Segoe UI', 'Microsoft JhengHei', Arial, sans-serif;
+            overflow: hidden; /* 防止滾動條影響全螢幕特效 */
+            position: relative;
+        }
+
+        /* 遊戲範圍外的電流背景特效 (使用偽元素增加質感) */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                radial-gradient(circle at 10% 10%, rgba(0, 242, 255, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 90% 90%, rgba(0, 242, 255, 0.05) 0%, transparent 50%);
+            opacity: 0.3;
+            z-index: -2;
+        }
+
+        /* 背景電流電路紋理 */
+        #bg-circuit {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            opacity: 0.1;
+            pointer-events: none; /* 不影響滑鼠 */
+        }
+
+        .info-panel {
+            text-align: center;
+            margin-bottom: 20px;
+            z-index: 10;
+        }
+
+        .title {
+            font-size: 32px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 10px var(--neon-color), 0 0 20px var(--neon-color);
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #aaa;
+        }
+
+        /* 遊戲 Canvas 容器，用於添加邊框霓虹效果 */
+        #canvas-container {
+            position: relative;
+            padding: 5px;
+            background: #000;
+            border-radius: 12px;
+            /* 基礎霓虹邊框效果 (呼吸燈由 GSAP 控制) */
+            box-shadow: 0 0 15px 2px var(--neon-color), 
+                        inset 0 0 10px 1px rgba(0, 242, 255, 0.5);
+            transition: box-shadow 0.3s ease; /* 供顏色切換時過渡 */
+        }
+
+        canvas {
+            background-color: #000;
+            border-radius: 8px;
+            cursor: crosshair;
+            display: block; /* 移除 Canvas 下方空隙 */
+        }
+
+        /* 按鍵提示 */
+        p.help {
+            font-size: 14px;
+            color: #666;
+            margin-top: 15px;
+            z-index: 10;
+        }
+
+        /* ==============================
+           全螢幕結算特效層
+           ============================== */
+        #overlay-layer {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none; /* 預設不擋住 Canvas */
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        #overlay-layer.active {
+            opacity: 1;
+            pointer-events: auto; /* 啟用層，可以擋住下方操作 */
+            background-color: rgba(0, 0, 0, 0.85); /* 結算時背景變暗 */
+        }
+
+        /* 螢光字體樣式 */
+        .fluorescent-text {
+            font-size: 80px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 20px;
+            /* 初始化，會被 JS 覆蓋 */
+            color: #fff;
+            text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #fff;
+        }
+
+        .restart-hint {
+            font-size: 20px;
+            color: #aaa;
+            margin-top: 20px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <svg id="bg-circuit" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:var(--neon-color);stop-opacity:0" />
+                <stop offset="50%" style="stop-color:var(--neon-color);stop-opacity:1" />
+                <stop offset="100%" style="stop-color:var(--neon-color);stop-opacity:0" />
+            </linearGradient>
+        </defs>
+        <path d="M0,20 L30,20 L40,10 L60,10 L70,20 L100,20" stroke="url(#grad1)" stroke-width="0.5" fill="none" class="circuit-path"/>
+        <path d="M0,80 L20,80 L30,90 L70,90 L80,80 L100,80" stroke="url(#grad1)" stroke-width="0.5" fill="none" class="circuit-path"/>
+        <path d="M50,0 L50,100" stroke="url(#grad1)" stroke-width="0.3" fill="none" class="circuit-path"/>
+    </svg>
+
+    <div class="info-panel">
+        <div class="title">極限電流急急棒</div>
+        <div class="subtitle">【警告：請沿著白線移動，避免觸電！】</div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+    </div>
+    
+    <p class="help">按下 **空白鍵** 或 **點擊螢幕** 重新開始</p>
+
+    <div id="overlay-layer">
+        <div id="status-text" class="fluorescent-text"></div>
+        <div class="restart-hint">按下 **空白鍵** 重新挑戰</div>
+    </div>
+
+    <script>
+        // 初始化 Canvas 和 Context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        const overlay = document.getElementById('overlay-layer');
+        const statusText = document.getElementById('status-text');
+
+        // 遊戲狀態變量
+        let isGameOver = false;
+        let hasStarted = false;
+        let mouseHistory = []; // 用於儲存滑鼠移動歷史
+
+        // 定義軌道點 (x, y) - 稍微調整過以增加美感
+        const pathPoints = [
+            {x: 70, y: 200},   // 起點 (START)
+            {x: 180, y: 60},
+            {x: 300, y: 340},
+            {x: 450, y: 140},
+            {x: 600, y: 300},
+            {x: 730, y: 200}   // 終點 (GOAL)
+        ];
+
+        // ==============================
+        // 核心繪製函式
+        // ==============================
+        function draw() {
+            // 清除 Canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. 繪製背景軌道 (黑色寬邊作為碰撞判定區)
+            ctx.strokeStyle = '#2a2a2e';
+            ctx.lineWidth = 48; // 判定區域寬度
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
+            pathPoints.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.stroke();
+
+            // 2. 繪製玩家可移動的白色安全路徑
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 26; // 安全區域寬度
+            ctx.beginPath();
+            ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
+            pathPoints.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.stroke();
+
+            // 3. 繪製滑鼠歷史軌跡 (僅在遊戲中且未結束時繪製)
+            if (mouseHistory.length > 1 && !isGameOver) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)'; // 半透明紅色
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(mouseHistory[0].x, mouseHistory[0].y);
+                for (let i = 1; i < mouseHistory.length; i++) {
+                    ctx.lineTo(mouseHistory[i].x, mouseHistory[i].y);
+                }
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 4. 繪製起點與終點 (增加霓虹感)
+            function drawGlowingOrb(x, y, radius, color) {
+                ctx.save();
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 15;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 加一個白色中心，看起來更亮
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(x, y, radius * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 起點 (綠色)
+            drawGlowingOrb(pathPoints[0].x, pathPoints[0].y, 24, '#0f0');
+            
+            // 終點 (紅色)
+            drawGlowingOrb(pathPoints[pathPoints.length-1].x, pathPoints[pathPoints.length-1].y, 24, '#f00');
+
+            // 文字標示
+            ctx.fillStyle = "black";
+            ctx.font = "bold 14px Arial";
+            ctx.textAlign = 'center';
+            ctx.fillText("START", pathPoints[0].x, pathPoints[0].y + 5);
+            ctx.fillStyle = "white";
+            ctx.fillText("GOAL", pathPoints[pathPoints.length-1].x, pathPoints[pathPoints.length-1].y + 5);
+        }
+
+        // ==============================
+        // 碰撞與遊戲邏輯
+        // ==============================
+        function checkCollision(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            // 如果已開始且遊戲未結束，記錄軌跡並檢查
+            if (hasStarted && !isGameOver) {
+                mouseHistory.push({x: mouseX, y: mouseY});
+                
+                // 為求流暢，僅當歷史長度改變時重新繪製
+                if (mouseHistory.length % 3 === 0) draw(); 
+            } else if (!hasStarted && !isGameOver) {
+                // 如果還沒開始，檢查是否碰到了起點
+                const pixelStart = ctx.getImageData(mouseX, mouseY, 1, 1).data;
+                // 檢查綠色分量
+                if (pixelStart[1] > 200 && pixelStart[0] < 50) {
+                    hasStarted = true;
+                    // 開始時，霓虹邊框變亮一點
+                    gsap.to(container, { boxShadow: '0 0 25px 5px var(--neon-color)', duration: 0.2 });
+                    mouseHistory.push({x: mouseX, y: mouseY}); // 記錄第一點
+                    draw();
+                }
+                return; // 還沒開始時，不判斷出界
+            }
+
+            if (isGameOver) return;
+
+            // 取得當前滑鼠位置的像素顏色 (RGBA)
+            const pixel = ctx.getImageData(mouseX, mouseY, 1, 1).data;
+            
+            // 判定邏輯：如果滑鼠位置的顏色是純黑色 (0,0,0) (背景色)，代表出界
+            // 我們檢查透明度 (Alpha) 是否為 255 (完全不透明)，且 RGB 為 0
+            if (pixel[3] === 255 && pixel[0] === 0 && pixel[1] === 0 && pixel[2] === 0) {
+                handleGameOver(false); // 失敗
+            } else {
+                // 如果碰到紅色終點
+                if (pixel[0] > 200 && pixel[1] < 50 && pixel[2] < 50) {
+                    handleGameOver(true); // 成功
+                }
+            }
+        }
+
+        // ==============================
+        // 遊戲結束處理 (成功/失敗)
+        // ==============================
+        function handleGameOver(isSuccess) {
+            isGameOver = true;
+            draw(); // 確保最後一刻的軌跡畫出來
+
+            // 1. 更新邊框霓虹燈顏色
+            if (isSuccess) {
+                container.style.setProperty('--neon-color', 'var(--success-color)');
+            } else {
+                container.style.setProperty('--neon-color', 'var(--fail-color)');
+                // 失敗時，額外加入劇烈震動效果
+                gsap.to(container, { x: 10, y: -10, duration: 0.05, repeat: 10, yoyo: true });
+                gsap.to(container, { x: 0, y: 0, delay: 0.5 }); // 復位
+            }
+
+            // 2. 顯示全螢幕結算層
+            overlay.classList.add('active');
+
+            // 3. 設定螢光字體和特效
+            if (isSuccess) {
+                statusText.innerText = "挑戰成功";
+                statusText.style.color = '#fff';
+                // GSAP 動畫化螢光效果
+                gsap.fromTo(statusText, 
+                    { textShadow: '0 0 10px #fff, 0 0 20px var(--success-color), 0 0 30px var(--success-color)' },
+                    { textShadow: '0 0 20px #fff, 0 0 40px var(--success-color), 0 0 60px var(--success-color)', duration: 0.5, repeat: -1, yoyo: true }
+                );
+
+                // 全螢幕彩帶特效 (使用 canvas-confetti)
+                var duration = 5 * 1000;
+                var animationEnd = Date.now() + duration;
+                var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+                function randomInRange(min, max) { return Math.random() * (max - min) + min; }
+
+                var interval = setInterval(function() {
+                  var timeLeft = animationEnd - Date.now();
+                  if (timeLeft <= 0) return clearInterval(interval);
+                  var particleCount = 50 * (timeLeft / duration);
+                  // since particles fall down, start a bit higher than random
+                  confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } }));
+                  confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } }));
+                }, 250);
+
+            } else {
+                statusText.innerText = "挑戰失敗";
+                statusText.style.color = '#fff';
+                // GSAP 動畫化失敗螢光效果 (更劇烈)
+                gsap.fromTo(statusText, 
+                    { textShadow: '0 0 10px #fff, 0 0 20px var(--fail-color), 0 0 30px var(--fail-color)' },
+                    { textShadow: '0 0 5px #fff, 0 0 10px var(--fail-color), 0 0 15px var(--fail-color)', duration: 0.1, repeat: 5, yoyo: true }
+                );
+            }
+        }
+
+        // ==============================
+        // 重置遊戲
+        // ==============================
+        function reset() {
+            isGameOver = false;
+            hasStarted = false;
+            mouseHistory = []; 
+            
+            // 隱藏結算層並清除字體動畫
+            overlay.classList.remove('active');
+            gsap.killTweensOf(statusText); // 停止字體呼吸
+
+            // 重置邊框霓虹燈為默認藍色
+            container.style.setProperty('--neon-color', '#00f2ff');
+            // 恢復邊框基礎亮度
+            gsap.to(container, { boxShadow: '0 0 15px 2px var(--neon-color)', duration: 0.3 });
+
+            // 確保 Canvas 回到純黑
+            canvas.style.backgroundColor = "#000";
+            draw();
+        }
+
+        // ==============================
+        // 背景特效動畫 (GSAP)
+        // ==============================
+        // 1. 霓虹邊框呼吸燈效果
+        gsap.to(container, {
+            boxShadow: '0 0 25px 4px var(--neon-color), inset 0 0 15px 2px rgba(0, 242, 255, 0.3)',
+            duration: 1.5,
+            repeat: -1,
+            yoyo: true,
+            ease: "power1.inOut"
+        });
+
+        // 2. 背景電路紋理隨機閃爍 (電流感)
+        gsap.to(".circuit-path", {
+            opacity: 0.03, 
+            duration: 0.1, 
+            repeat: -1, 
+            repeatDelay: () => Math.random() * 2 + 0.5, // 隨機延遲，營造不規則感
+            yoyo: true,
+            ease: "steps(1)" // 像電燈泡閃爍
+        });
+
+
+        // ==============================
+        // 事件監聽
+        // ==============================
+        canvas.addEventListener('mousemove', checkCollision);
+        // 按下空白鍵重置
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') reset();
+        });
+        // 點擊結算層重置 (方便移動設備)
+        overlay.addEventListener('click', reset);
+
+        // 初始化繪製
+        reset();
+    </script>
+</body>
+</html>
