@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>深海網頁：淡江教科</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #010409; /* 極深的海底色 */
+    }
+
+    /* 畫布置頂並允許滑鼠穿透 */
+    canvas {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 10;
+      pointer-events: none; 
+    }
+
+    /* iframe 容器：設定圓角與發光 */
+    .web-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 85%;  
+      height: 75%; 
+      z-index: 1;
+      
+      /* 圓角設定 */
+      border-radius: 30px; 
+      overflow: hidden; /* 確保內容不會超出圓角 */
+      
+      /* 微微的外發光效果 (使用綠色調與網頁呼應) */
+      border: 1px solid rgba(0, 255, 150, 0.3);
+      box-shadow: 0 0 30px rgba(0, 255, 170, 0.4), 
+                  0 0 10px rgba(0, 255, 170, 0.2);
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: white;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="web-container">
+    <iframe src="https://www.et.tku.edu.tw/"></iframe>
+  </div>
+
+  <script>
+    let grasses = [];
+    let tinyBubbles = [];
+    let fishes = [];
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      
+      let grassColors = [
+        [10, 80, 40, 180], 
+        [30, 120, 60, 150], 
+        [50, 180, 100, 130],
+        [0, 100, 80, 160]
+      ];
+
+      // 增加海草數量至 150 根，讓底部更茂密
+      for (let i = 0; i < 150; i++) {
+        grasses.push({
+          x: random(-50, width + 50),
+          h: random(height * 0.22, height * 0.28), // 保持高度一致性
+          w: random(10, 22),
+          color: random(grassColors),
+          noiseOffset: random(20000)
+        });
+      }
+
+      // 初始化小氣泡
+      for (let i = 0; i < 130; i++) {
+        tinyBubbles.push(new TinyPopBubble());
+      }
+
+      // 增加一點魚
+      for (let i = 0; i < 6; i++) {
+        fishes.push(new Fish());
+      }
+    }
+
+    function draw() {
+      clear(); // 保持背景透明以顯示 iframe
+
+      // 1. 繪製背景魚類
+      for (let f of fishes) f.update(), f.display();
+
+      // 2. 繪製海草 (幅度 100，高度齊平)
+      for (let g of grasses) {
+        drawOrganicGrass(g);
+      }
+
+      // 3. 繪製會破裂的小氣泡
+      for (let tb of tinyBubbles) {
+        tb.update();
+        tb.display();
+      }
+    }
+
+    function drawOrganicGrass(g) {
+      push();
+      // 為海草增加發光質感
+      drawingContext.shadowBlur = 12;
+      drawingContext.shadowColor = color(g.color[0], g.color[1], g.color[2]);
+      
+      noFill();
+      stroke(g.color);
+      strokeWeight(g.w);
+      strokeCap(ROUND);
+
+      let time = frameCount * 0.006; 
+      let mouseSway = map(mouseX, 0, width, -2.5, 2.5); 
+
+      beginShape();
+      for (let i = 0; i <= 10; i++) {
+        let t = i / 10; 
+        let nx = g.noiseOffset + time + (t * 1.5); 
+        
+        // 幅度 100 的扭動
+        let sway = (noise(nx) - 0.5) * 100 * t + (mouseSway * 40 * t);
+        
+        let vx = g.x + sway;
+        let vy = height - (t * g.h);
+        
+        curveVertex(vx, vy);
+        if (i === 0 || i === 10) curveVertex(vx, vy);
+      }
+      endShape();
+      pop();
+    }
+
+    class TinyPopBubble {
+      constructor() {
+        this.reset();
+        this.y = random(height);
+      }
+      reset() {
+        this.x = random(width);
+        this.y = height + 10;
+        this.r = random(1.5, 4);
+        this.speed = random(0.8, 2.2);
+        this.popY = random(height * 0.1, height * 0.7);
+        this.isPopping = false;
+        this.popTimer = 0;
+      }
+      update() {
+        if (!this.isPopping) {
+          this.y -= this.speed;
+          this.x += sin(frameCount * 0.03 + this.x) * 0.6;
+          if (this.y < this.popY) this.isPopping = true;
+        } else {
+          this.popTimer++;
+          if (this.popTimer > 10) this.reset();
+        }
+      }
+      display() {
+        noStroke();
+        if (!this.isPopping) {
+          fill(255, 255, 255, 90);
+          circle(this.x, this.y, this.r * 2);
+        } else {
+          // 氣泡破掉的碎裂感
+          fill(255, 255, 255, 180 - this.popTimer * 18);
+          let d = this.popTimer * 1.5;
+          circle(this.x + d, this.y + d, 1);
+          circle(this.x - d, this.y - d, 1);
+          circle(this.x + d, this.y - d, 1);
+          circle(this.x - d, this.y + d, 1);
+        }
+      }
+    }
+
+    class Fish {
+      constructor() {
+        this.x = random(width);
+        this.y = random(height * 0.1, height * 0.6);
+        this.speed = random(0.6, 1.5);
+        this.c = color(random([255, 200]), 120, 0, 200);
+      }
+      update() {
+        this.x += this.speed;
+        if (this.x > width + 100) this.x = -100;
+      }
+      display() {
+        push();
+        translate(this.x, this.y + sin(frameCount * 0.04) * 10);
+        fill(this.c);
+        noStroke();
+        ellipse(0, 0, 24, 12);
+        triangle(-12, 0, -20, -8, -20, 8);
+        pop();
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>
