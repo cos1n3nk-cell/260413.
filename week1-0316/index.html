@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>質感霓虹文字牆 + 網站切換</title>
+    <style>
+        :root {
+            --main-color: #00f7ff;
+            --sub-color: #ffffff;
+            --text-size: 32px;
+        }
+
+        body {
+            margin: 0;
+            background-color: #000;
+            overflow: hidden;
+            font-family: "Arial Black", "Microsoft JhengHei", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 控制面板 - 保持在最上方 */
+        #ui-layer {
+            position: fixed;
+            top: 25px;
+            left: 25px;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(20, 20, 20, 0.85);
+            padding: 10px 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        /* 新增的下拉選單樣式 */
+        select {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--main-color);
+            color: var(--main-color);
+            padding: 6px;
+            border-radius: 6px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="color"] { border: none; width: 30px; height: 30px; cursor: pointer; background: none; }
+        input[type="range"] { accent-color: var(--main-color); cursor: pointer; width: 80px; }
+        input[type="text"] {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--main-color);
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            outline: none;
+            width: 100px;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid white;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: 0.3s;
+        }
+        .btn.active {
+            background: var(--main-color);
+            border-color: var(--main-color);
+            color: #000;
+            box-shadow: 0 0 15px var(--main-color);
+        }
+
+        /* Iframe 容器樣式 */
+        #frame-wrapper {
+            position: relative;
+            z-index: 10; /* 在文字牆之上 */
+            margin-top: 100px;
+            width: 85vw;
+            height: 75vh;
+            border: 2px solid var(--main-color);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(0, 247, 255, 0.3);
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(5px);
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white; /* 網站內容通常需白底 */
+        }
+
+        /* 文字背景牆 - 層級改為 1 */
+        #wall {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            align-content: flex-start;
+            padding: 10px;
+            box-sizing: border-box;
+            z-index: 1; 
+        }
+
+        .item {
+            font-size: var(--text-size);
+            font-weight: 900;
+            margin: 10px;
+            white-space: nowrap;
+            transition: all 0.5s ease;
+        }
+
+        .color-primary {
+            color: var(--main-color);
+            text-shadow: 0 0 5px var(--main-color), 0 0 10px var(--main-color);
+        }
+        .color-secondary {
+            color: var(--sub-color);
+            text-shadow: 0 0 5px var(--sub-color), 0 0 10px var(--sub-color);
+        }
+
+        /* 動態效果 */
+        @keyframes subtleShake {
+            0%, 100% { transform: translate(0,0); }
+            25% { transform: translate(-2px, 2px); }
+            75% { transform: translate(2px, -2px); }
+        }
+        .mode-crazy .item { animation: subtleShake 0.15s infinite; }
+
+        @keyframes smoothRotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .mode-rotate .item { animation: smoothRotate 4s linear infinite; }
+
+        @keyframes pulseScale {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        .mode-scale .item { animation: pulseScale 2s ease-in-out infinite; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <select id="site-selector" onchange="changeSite()">
+            <option value="">-- 選擇網站 --</option>
+            <option value="https://www.tku.edu.tw">TKU</option>
+            <option value="https://www.et.tku.edu.tw">TKUET</option>
+        </select>
+
+        <input type="text" id="txt" placeholder="背景文字..." autofocus>
+        <input type="color" id="cp" value="#00f7ff">
+        <input type="range" id="sz" min="16" max="100" value="32">
+        
+        <button id="btn-crazy" class="btn">SHAKE</button>
+        <button id="btn-rotate" class="btn">ROTATE</button>
+        <button id="btn-scale" class="btn">PULSE</button>
+    </div>
+
+    <div id="frame-wrapper">
+        <iframe id="web-frame" src="about:blank"></iframe>
+    </div>
+
+    <div id="wall"></div>
+
+    <script>
+        const txtInput = document.getElementById('txt');
+        const szInput = document.getElementById('sz');
+        const cpInput = document.getElementById('cp');
+        const wall = document.getElementById('wall');
+        const iframe = document.getElementById('web-frame');
+        const selector = document.getElementById('site-selector');
+
+        // 切換網站功能
+        function changeSite() {
+            if (selector.value !== "") {
+                iframe.src = selector.value;
+            }
+        }
+
+        // 按鈕切換邏輯
+        const setupBtn = (id, className) => {
+            document.getElementById(id).onclick = function() {
+                this.classList.toggle('active');
+                document.body.classList.toggle(className);
+            };
+        };
+        setupBtn('btn-crazy', 'mode-crazy');
+        setupBtn('btn-rotate', 'mode-rotate');
+        setupBtn('btn-scale', 'mode-scale');
+
+        // 顏色連動
+        cpInput.oninput = (e) => {
+            document.documentElement.style.setProperty('--main-color', e.target.value);
+        };
+
+        // 大小連動
+        szInput.oninput = (e) => {
+            document.documentElement.style.setProperty('--text-size', e.target.value + 'px');
+            render();
+        };
+
+        txtInput.oninput = render;
+        window.onresize = render;
+
+        function render() {
+            const val = txtInput.value;
+            wall.innerHTML = '';
+            if (!val) return;
+
+            const fontSize = parseInt(szInput.value);
+            // 修正計算數量，避免過多導致卡頓
+            const count = Math.ceil((window.innerWidth * window.innerHeight) / (fontSize * val.length * 25)) + 30;
+
+            const frag = document.createDocumentFragment();
+            for (let i = 0; i < count; i++) {
+                const span = document.createElement('span');
+                span.className = `item ${i % 2 === 0 ? 'color-primary' : 'color-secondary'}`;
+                span.textContent = val;
+                frag.appendChild(span);
+            }
+            wall.appendChild(frag);
+        }
+    </script>
+</body>
+</html>
