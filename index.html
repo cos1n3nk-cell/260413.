@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>數位核心觀測站 | 億點點豐富度版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; padding: 0; background: #000003; color: #fff; font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; overflow: hidden; }
+        
+        /* 導覽區域 */
+        .nav-container {
+            position: absolute;
+            left: 40px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            z-index: 100;
+        }
+
+        .nav-item { display: flex; flex-direction: column; }
+        .week-label { 
+            color: rgba(0, 255, 255, 0.4); 
+            font-size: 11px; 
+            font-family: monospace; 
+            margin-bottom: 5px; 
+            letter-spacing: 2px;
+            text-shadow: 0 0 5px cyan;
+        }
+
+        button {
+            background: rgba(0, 255, 255, 0.03);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            color: #ccffff;
+            padding: 12px 20px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-radius: 4px;
+            width: 170px;
+            backdrop-filter: blur(4px);
+        }
+
+        button:hover {
+            background: rgba(0, 255, 255, 0.15);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+            border-color: #00ffff;
+            transform: translateX(5px);
+        }
+
+        /* 作品顯示區 (Iframe) with 強力發光邊界 */
+        .display-area {
+            position: absolute;
+            right: 40px;
+            top: 40px;
+            bottom: 40px;
+            left: 280px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            z-index: 50;
+            
+            /* 能量力場邊界 */
+            border: 2px solid rgba(0, 255, 255, 0.8);
+            box-shadow: 
+                0 0 20px rgba(0, 255, 255, 0.5), 
+                inset 0 0 15px rgba(0, 255, 255, 0.3);
+            
+            /* 呼吸燈動畫 */
+            animation: borderPulse 4s infinite ease-in-out;
+        }
+
+        @keyframes borderPulse {
+            0%, 100% { 
+                box-shadow: 0 0 15px rgba(0, 255, 255, 0.4), inset 0 0 10px rgba(0, 255, 255, 0.2);
+                border-color: rgba(0, 255, 255, 0.6);
+            }
+            50% { 
+                box-shadow: 0 0 40px rgba(0, 255, 255, 0.8), inset 0 0 25px rgba(0, 255, 255, 0.4);
+                border-color: rgba(0, 255, 255, 1);
+            }
+        }
+
+        iframe { width: 100%; height: 100%; border: none; background: #000; }
+        #p5-canvas { position: fixed; top: 0; left: 0; z-index: 10; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div class="nav-container">
+        <div class="nav-item"><span class="week-label">WEEK 1</span><button class="nav-btn" onclick="changeFrame('https://cos1n3nk-cell.github.io/260316/')">網頁元素</button></div>
+        <div class="nav-item"><span class="week-label">WEEK 2</span><button class="nav-btn" onclick="changeFrame('https://cos1n3nk-cell.github.io/260323/')">動態海草</button></div>
+        <div class="nav-item"><span class="week-label">WEEK 3-1</span><button class="nav-btn" onclick="changeFrame('https://cos1n3nk-cell.github.io/2603301/')">找顏色</button></div>
+        <div class="nav-item"><span class="week-label">WEEK 3-2</span><button class="nav-btn" onclick="changeFrame('https://cos1n3nk-cell.github.io/260330/')">電流急急棒</button></div>
+    </div>
+
+    <div class="display-area">
+        <iframe id="main-frame" src="https://cos1n3nk-cell.github.io/260316/"></iframe>
+    </div>
+
+    <div id="p5-canvas"></div>
+
+    <script>
+        function changeFrame(url) { document.getElementById('main-frame').src = url; }
+
+        // --- p5.js 「億點點」豐富度繪圖邏輯 ---
+        let dustField = [];
+        let dataStreams = [];
+        let nebulaNoiseX = 0;
+        let scanLineY = 0;
+
+        function setup() {
+            let cnv = createCanvas(windowWidth, windowHeight);
+            cnv.parent('p5-canvas');
+            
+            // 【技術點：For/Class】初始化 120 個精緻微塵 (Layer 3)
+            for (let i = 0; i < 120; i++) dustField.push(new DigitalDust());
+            
+            // 【技術點：For/Class】初始化 50 條數據鏈 (Layer 2)
+            for (let i = 0; i < 50; i++) dataStreams.push(new DataStream());
+            
+            nebulaNoiseX = random(1000);
+            scanLineY = random(height);
+        }
+
+        function draw() {
+            clear();
+            background(0, 0, 5); // 深邃基底
+
+            // --- Layer 1: 遠景「數位星雲」 ( noise() 技術應用 ) ---
+            drawNebula();
+
+            // --- Atmosphere: 環境掃描波 ---
+            drawScanLine();
+
+            // --- Layer 2: 中景「流動數據鏈」 ( Class/Array ) ---
+            for (let stream of dataStreams) {
+                stream.update();
+                stream.display();
+            }
+
+            // --- Layer 3: 近景「精緻微塵」 ( Class/Vertex/Rotation ) ---
+            for (let dust of dustField) {
+                dust.update();
+                dust.display();
+            }
+
+            // --- UI: 導線與邊界裝飾 ---
+            drawUIEffects();
+        }
+
+        function drawNebula() {
+            loadPixels();
+            let noiseScale = 0.005;
+            for (let x = 0; x < width; x += 15) { // 步長設大強化性能
+                for (let y = 0; y < height; y += 15) {
+                    let noiseVal = noise((x + nebulaNoiseX) * noiseScale, y * noiseScale, frameCount * 0.001);
+                    if (noiseVal > 0.6) { // 僅顯示高雜訊區域
+                        noStroke();
+                        fill(0, 255, 255, (noiseVal - 0.6) * 30); // 極淡的青色暈光
+                        rect(x, y, 15, 15);
+                    }
+                }
+            }
+            nebulaNoiseX += 0.2; // 緩慢漂移
+        }
+
+        function drawScanLine() {
+            stroke(0, 255, 255, 10); // 極淡
+            strokeWeight(0.5);
+            line(0, scanLineY, width, scanLineY);
+            scanLineY += 0.5;
+            if (scanLineY > height) scanLineY = 0;
+            // 隨機閃爍出現
+            if (random(100) < 1) scanLineY = random(height);
+        }
+
+        function drawUIEffects() {
+            let hubX = 230;
+            let displayAreaX = 280; 
+            
+            // 垂直主幹
+            stroke(0, 255, 255, 40);
+            strokeWeight(0.5);
+            line(hubX, 0, hubX, height);
+
+            // 取得按鈕並畫連線
+            let buttons = document.querySelectorAll('.nav-btn');
+            buttons.forEach((btn) => {
+                let rect = btn.getBoundingClientRect();
+                let y = rect.top + rect.height / 2;
+                let isHover = abs(mouseY - y) < 30;
+                
+                push();
+                if (isHover) {
+                    stroke(0, 255, 255, 255);
+                    strokeWeight(1.5);
+                    drawingContext.shadowBlur = 10;
+                    drawingContext.shadowColor = 'cyan';
+                } else {
+                    stroke(0, 255, 255, 60);
+                }
+                noFill();
+                beginShape();
+                vertex(hubX, y);
+                vertex(hubX + 25, y);
+                vertex(displayAreaX, y - 20); // 連線直接對準發光邊界
+                endShape();
+                pop();
+            });
+        }
+
+        // Layer 2: 流動數據鏈
+        class DataStream {
+            constructor() {
+                this.reset();
+                this.y = random(height); // 初始隨機高度
+            }
+            reset() {
+                this.x = random(width);
+                this.y = random(-200, -50);
+                this.speed = random(2, 6);
+                this.len = random(20, 80);
+                this.alpha = random(30, 80);
+            }
+            update() {
+                this.y += this.speed;
+                if (this.y > height + this.len) this.reset();
+            }
+            display() {
+                stroke(0, 255, 255, this.alpha);
+                strokeWeight(0.5);
+                line(this.x, this.y, this.x, this.y - this.len);
+            }
+        }
+
+        // Layer 3: 精緻微塵 (種類優化、新增自轉)
+        class DigitalDust {
+            constructor() {
+                this.pos = createVector(random(width), random(height));
+                this.vel = createVector(random(-0.5, 0.5), random(-0.2, -0.8));
+                this.type = floor(random(6)); // 增加到 6 種圖案
+                this.size = random(3, 8);
+                this.angle = random(TWO_PI);
+                this.rotSpeed = random(-0.02, 0.02);
+                this.alpha = random(80, 200);
+                this.pulseSpeed = random(0.02, 0.05);
+            }
+            update() {
+                this.pos.add(this.vel);
+                this.angle += this.rotSpeed; // 自轉
+                if (this.pos.y < 0) this.pos.y = height;
+                if (this.pos.x < 0) this.pos.x = width;
+                if (this.pos.x > width) this.pos.x = 0;
+            }
+            display() {
+                push();
+                translate(this.pos.x, this.pos.y);
+                rotate(this.angle); // 應用自轉
+                
+                let a = this.alpha * (0.6 + 0.4 * sin(frameCount * this.pulseSpeed));
+                stroke(0, 255, 255, a);
+                drawingContext.shadowBlur = 10;
+                drawingContext.shadowColor = 'cyan';
+                noFill();
+
+                // 【技術點：Vertex/For】繪製 6 種小巧精緻圖案
+                let s = this.size;
+                if (this.type === 0) { line(-s, 0, s, 0); line(0, -s, 0, s); } // 十字星
+                else if (this.type === 1) { ellipse(0, 0, s, s); } // 微型光圈
+                else if (this.type === 2) { // 微型齒輪
+                    for(let i=0; i<8; i++){
+                        rotate(PI/4);
+                        line(s*0.5, 0, s, 0);
+                    }
+                }
+                else if (this.type === 3) { // 雙子星 ( point + vertex )
+                    point(-s*0.5, -s*0.5);
+                    point(s*0.5, s*0.5);
+                }
+                else if (this.type === 4) { // 旋轉矩陣 ( vertex )
+                    rect(-s*0.5, -s*0.5, s, s);
+                }
+                else { // 微型霓虹光束
+                    line(0, 0, s*1.5, 0);
+                }
+                pop();
+            }
+        }
+
+        function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+    </script>
+</body>
+</html>
